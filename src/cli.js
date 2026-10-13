@@ -616,7 +616,7 @@ Press Enter here when done…`);
 
       // --scan N: same search across N consecutive check-in dates, one browser session.
       if (opts.scan) {
-        const n = Math.min(14, Math.max(2, Number(opts.scan) || 5));
+        const n = Math.min(14, Math.max(1, Number(opts.scan) || 5));
         const nights = Number(opts.nights ?? 1);
         const days = [];
         for (let i = 0; i < n; i++) {

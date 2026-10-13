@@ -240,7 +240,7 @@ const TOOLS = [
       properties: {
         destination: { type: 'string' },
         start_date: { type: 'string', description: 'First check-in date, YYYY-MM-DD.' },
-        days: { type: 'integer', minimum: 2, maximum: 14, default: 5, description: 'How many consecutive check-in dates to compare.' },
+        days: { type: 'integer', minimum: 1, maximum: 14, default: 5, description: 'How many consecutive check-in dates to compare.' },
         nights: { type: 'integer', minimum: 1, default: 1, description: 'Stay length at each date.' },
         ...STAY_PROPS,
       },
@@ -248,7 +248,7 @@ const TOOLS = [
     handler: async (session, args) => {
       const start = String(args.start_date);
       if (!isDate(start)) throw new Error(`start_date must be YYYY-MM-DD, got "${start}"`);
-      const n = Math.min(14, Math.max(2, Number(args.days ?? 5)));
+      const n = Math.min(14, Math.max(1, Number(args.days ?? 5)));
       const nights = Number(args.nights ?? 1);
       const target = args.currency ? String(args.currency).toUpperCase() : null;
 

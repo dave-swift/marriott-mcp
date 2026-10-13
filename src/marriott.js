@@ -137,9 +137,10 @@ export const isRealPage = (browser) =>
   browser.evaluate(`!!document.getElementById('__NEXT_DATA__')`);
 
 export class MarriottClient {
-  constructor(browser, { verbose = false } = {}) {
+  constructor(browser, { verbose = false, retryDelayMs = 15000 } = {}) {
     this.browser = browser;
     this.verbose = verbose;
+    this.retryDelayMs = retryDelayMs;
     this.signatures = new Map();
   }
 
@@ -195,8 +196,25 @@ export class MarriottClient {
     this.#log('signatures scraped:', this.signatures.size, 'buildId', data.buildId);
   }
 
-  /** Execute a safelisted operation from inside the page. */
-  async call(operationName, variables, { app = 'shop' } = {}) {
+  /**
+   * Execute a safelisted operation from inside the page.
+   *
+   * A backend hiccup (an nginx 404/5xx, sometimes wrapped as a GraphQL error whose message
+   * is a bare HTML page) is retried once after `retryDelayMs`. Nothing else is: a 403 is
+   * Akamai, and retry pressure against a challenge escalates it into a block.
+   */
+  async call(operationName, variables, opts = {}) {
+    try {
+      return await this.#callOnce(operationName, variables, opts);
+    } catch (err) {
+      if (!err.transient) throw err;
+      this.#log(`${err.message.slice(0, 120)}; retrying once in ${this.retryDelayMs / 1000}s`);
+      await sleep(this.retryDelayMs);
+      return this.#callOnce(operationName, variables, opts);
+    }
+  }
+
+  async #callOnce(operationName, variables, { app = 'shop' } = {}) {
     const signature = this.signatures.get(operationName);
     if (!signature) {
       throw new Error(
@@ -238,10 +256,15 @@ export class MarriottClient {
             JSON.stringify(out.json)?.slice(0, 400) ??
             out.snippet ??
             '';
-      throw new Error(`${operationName} returned HTTP ${out.status}. ${detail}`);
+      const err = new Error(`${operationName} returned HTTP ${out.status}. ${detail}`);
+      err.transient = out.status === 404 || out.status >= 500;
+      throw err;
     }
     if (out.json?.errors?.length) {
-      throw new Error(`${operationName} GraphQL error: ${out.json.errors[0].message}`);
+      const message = String(out.json.errors[0].message ?? '');
+      const err = new Error(`${operationName} GraphQL error: ${message}`);
+      err.transient = /^\s*<|<html/i.test(message);
+      throw err;
     }
     return out.json.data;
   }
