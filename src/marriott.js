@@ -57,8 +57,19 @@ export const RATE_TYPES = {
   ],
 };
 
-/** Any Marriott corporate/promo code rides on the generic CLUSTER type. */
-export const clusterRate = (code) => [{ type: 'CLUSTER', value: code.toUpperCase() }];
+/** The codes in a code argument: one, or several separated by commas, upper-cased. */
+export const splitCodes = (code) =>
+  String(code ?? '')
+    .split(',')
+    .map((c) => c.trim().toUpperCase())
+    .filter(Boolean);
+
+/**
+ * Any Marriott corporate/promo code rides on the generic CLUSTER type. Several codes,
+ * comma-separated, are asked for in one search: one CLUSTER entry each, and each hotel
+ * answers with a rate per code (see pickRates).
+ */
+export const clusterRate = (code) => [...new Set(splitCodes(code))].map((value) => ({ type: 'CLUSTER', value }));
 
 const FACET_TERMS = [
   'BRANDS',
@@ -540,13 +551,20 @@ export function primaryImageUrl(property) {
  * the cash rate. So the first entry is not the cash rate: pick each by its kind,
  * a bookable one first. A hotel with no cash rate falls back to its points rate,
  * so its status still says whether it can be booked.
+ *
+ * A code's rate comes back as a "Special" category with the code as its value. When a
+ * search asks for several codes, the cheapest bookable code rate wins; the standard
+ * rate is only used when none of the codes applied, so it still reads as "code missed".
  */
 export function pickRates(rates = []) {
   const list = (rates ?? []).filter(Boolean);
   const sellable = (r) => r.status?.code === 'AvailableForSale';
   const isCash = (r) => !!r.rateModes?.lowestAverageRate;
   const isPoints = (r) => r.rateModes?.pointsPerUnit?.points != null;
-  const cash = list.find((r) => isCash(r) && sellable(r)) ?? list.find(isCash);
+  const allIn = (r) => money(r.rateModes.lowestAverageRate.totalAmount)?.value ?? Infinity;
+  const codeRates = list.filter((r) => isCash(r) && sellable(r) && r.rateCategory?.code === 'Special');
+  const cheapestCode = codeRates.reduce((a, b) => (a && allIn(a) <= allIn(b) ? a : b), null);
+  const cash = cheapestCode ?? list.find((r) => isCash(r) && sellable(r)) ?? list.find(isCash);
   const pointsRate = list.find((r) => isPoints(r) && sellable(r)) ?? null;
   return { rate: cash ?? pointsRate ?? list[0], pointsRate };
 }
@@ -584,6 +602,8 @@ export function toRows(conn) {
       taxes: taxes?.value ?? null,
       nights: rate?.lengthOfStay ?? null,
       rateCategory: rate?.rateCategory?.code ?? '',
+      // The code whose rate this row prices (a "Special" cash rate), or null for any other.
+      rateCode: rate?.rateModes?.lowestAverageRate && rate.rateCategory?.code === 'Special' ? rate.rateCategory.value ?? null : null,
       membersOnly: rate?.membersOnly ?? null,
       status: rate?.status?.code ?? '',
       bookable: b.bookable ?? null,

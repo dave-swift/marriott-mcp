@@ -1,7 +1,7 @@
 // Flattening a search connection into rows: the primary photo's full URL.
 // Run: node test/rows.test.mjs
 import assert from 'node:assert/strict';
-import { toRows, primaryImageUrl, pickRates } from '../src/marriott.js';
+import { toRows, primaryImageUrl, pickRates, clusterRate, splitCodes } from '../src/marriott.js';
 import { resultsTable } from '../src/format.js';
 
 let passed = 0;
@@ -93,6 +93,51 @@ test('the results table shows points per night only when there are some', () => 
   assert.match(resultsTable(withPoints), /\| 130,000 \|/);
   const without = toRows({ edges: [hotel('LASFI', [cash(23197, 26300)])] });
   assert.doesNotMatch(resultsTable(without), /Points\/night/);
+});
+
+// A search for several codes: each comes back as a "Special" rate with the code as its
+// value, alongside whatever else was asked for.
+const coded = (code, night, total, status = 'AvailableForSale') => ({ ...cash(night, total), rateCategory: { code: 'Special', value: code }, status: { code: status } });
+
+test('several codes in one search send one CLUSTER entry each', () => {
+  assert.deepEqual(clusterRate('wrk222, s9r,WRK222'), [
+    { type: 'CLUSTER', value: 'WRK222' },
+    { type: 'CLUSTER', value: 'S9R' },
+  ]);
+  assert.deepEqual(splitCodes('A1,,b2 '), ['A1', 'B2']);
+});
+
+test('the cheapest bookable code rate prices the hotel, and says which code', () => {
+  const [r] = toRows({ edges: [hotel('LASBL', [coded('WRK222', 50000, 60000), coded('S9R', 45000, 54000), coded('ARG444', 30000, 36000, 'NotAvailable'), cash(56640, 70454)])] });
+  assert.equal(r.totalPerNight, 540);
+  assert.equal(r.rateCode, 'S9R');
+  assert.equal(r.rateCategory, 'Special');
+});
+
+test('a code rate wins over a cheaper standard rate, which is only the fallback', () => {
+  const [r] = toRows({ edges: [hotel('LASBL', [cash(40000, 50000), coded('WRK222', 50000, 60000)])] });
+  assert.equal(r.rateCode, 'WRK222');
+  assert.equal(r.totalPerNight, 600);
+});
+
+test('when no code applies, the standard rate prices the hotel and is marked', () => {
+  const rows = toRows({ edges: [hotel('LASBL', [coded('WRK222', 0, 0, 'NotAvailable'), cash(56640, 70454)])] });
+  assert.equal(rows[0].rateCode, null);
+  assert.equal(rows[0].rateCategory, 'StandardRates');
+  const table = resultsTable(rows, { code: 'WRK222,S9R' });
+  assert.match(table, /705 USD!/);
+  assert.ok(table.includes('none of the codes W****2,S*R applied here'));
+});
+
+test('the results table names the winning code, masked, only for several codes', () => {
+  const rows = toRows({ edges: [hotel('LASBL', [coded('WRK222', 50000, 60000), cash(56640, 70454)])] });
+  const several = resultsTable(rows, { code: 'WRK222,S9R' });
+  assert.ok(several.includes('| Code |'));
+  assert.ok(several.includes('| W****2 |'));
+  assert.ok(!several.includes('WRK222'));
+  const one = resultsTable(rows, { code: 'WRK222' });
+  assert.ok(!one.includes('| Code |'));
+  assert.ok(!one.includes('WRK222'));
 });
 
 console.log(`\n${passed} passed`);

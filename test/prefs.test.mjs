@@ -101,4 +101,27 @@ test('describePrefs masks codes by default and never masks plain settings', () =
   assert.deepEqual(describePrefs({ code: 'ABC123' }, { reveal: true }), [['code', 'ABC123']]);
 });
 
+test('several codes, comma-separated, resolve one by one, saved names included', () => {
+  const r = resolveCode({ code: 'work, s9r ,ARG444', prefs, env: noEnv });
+  assert.equal(r.code, 'WRK222,S9R,ARG444');
+  assert.equal(r.source, 'argument');
+});
+
+test('a code listed twice is asked for once', () => {
+  assert.equal(resolveCode({ code: 'work,WRK222', prefs, env: noEnv }).code, 'WRK222');
+});
+
+test('a list from the environment resolves the same way', () => {
+  assert.equal(resolveCode({ prefs, env: { MARRIOTT_CODE: 'side,work' } }).code, 'SDE333,WRK222');
+});
+
+test('a bad code in a list is refused, and so is a list of nothing', () => {
+  assert.throws(() => resolveCode({ code: 'work,x', prefs, env: noEnv }), /does not look like a cluster code/);
+  assert.throws(() => resolveCode({ code: ',', prefs, env: noEnv }), /has no cluster code/);
+});
+
+test('several codes are masked one by one', () => {
+  assert.equal(maskCode('ABC123,S9R'), 'A****3,S*R');
+});
+
 console.log(`\n${passed} passed`);

@@ -644,6 +644,10 @@ without putting the code in the conversation; pass `no_code: true` to ignore the
 | `points` | `[{"type":"CLUSTER","value":"MRW"},{"type":"STANDARD","value":""},{"type":"CLUSTER","value":"P17"}]` |
 
 `CLUSTER` is the generic carrier: any Marriott cluster/corporate code works via `--code`.
+Several codes, comma-separated (`--code work,S9R`, or the MCP's `code: "work,S9R"`), are
+asked for in one search: one `CLUSTER` entry each. Each hotel is priced at its cheapest
+bookable code rate, and a CODE column (masked unless `--reveal`) says which code won. The
+standard rate is used only when none of the codes applied, and is marked `!` as for one code.
 Points and a corporate code are mutually exclusive.
 
 A `points` search gets each hotel's rates back as one entry per type, in an order that

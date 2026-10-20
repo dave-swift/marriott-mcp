@@ -4,6 +4,7 @@
 // and additionally mark the best value (price per tier point) and the best quality.
 
 import { TIERS, tierColour } from './brands.js';
+import { maskCode } from './prefs.js';
 
 const useColour =
   !process.env.NO_COLOR && (process.stdout.isTTY || process.env.FORCE_COLOR);
@@ -211,7 +212,10 @@ export function renderResults(rows, meta = {}) {
 
   // Award prices only come back when points were asked for: show their column only then.
   const showPoints = rows.some((r) => r.pointsPerNight != null);
-  const W = { mark: 3, tier: 4, hotel: 38, brand: 17, dist: 6, rtg: 4, night: 11, total: 12, pt: 6, pts: 10 };
+  // With several codes, say which one priced each hotel (masked unless meta.reveal).
+  const showCode = (meta.codes?.length ?? 0) > 1;
+  const codeOf = (r) => (r.rateCode ? (meta.reveal ? r.rateCode : maskCode(r.rateCode)) : c.grey('std'));
+  const W = { mark: 3, tier: 4, hotel: 38, brand: 17, dist: 6, rtg: 4, night: 11, total: 12, pt: 6, pts: 10, code: 12 };
   const head =
     padEnd('', W.mark) +
     ' ' + padEnd('TIER', W.tier) +
@@ -222,13 +226,15 @@ export function renderResults(rows, meta = {}) {
     ' ' + padStart('/NIGHT', W.night) +
     ' ' + padStart('ALL-IN', W.total) +
     ' ' + padStart('/PT', W.pt) +
-    (showPoints ? ' ' + padStart('PTS/NIGHT', W.pts) : '');
+    (showPoints ? ' ' + padStart('PTS/NIGHT', W.pts) : '') +
+    (showCode ? ' ' + padEnd('CODE', W.code) : '');
   console.log(c.bold(head));
   console.log(
     c.dim(
       '─'.repeat(
         W.mark + W.tier + W.hotel + W.brand + W.dist + W.rtg + W.night + W.total + W.pt + 8 +
-          (showPoints ? W.pts + 1 : 0),
+          (showPoints ? W.pts + 1 : 0) +
+          (showCode ? W.code + 1 : 0),
       ),
     ),
   );
@@ -259,7 +265,8 @@ export function renderResults(rows, meta = {}) {
         ' ' + padStart(fmtMoney(r.price, r.currency), W.night) +
         ' ' + padStart(totalCell, W.total) +
         ' ' + padStart(ptCell, W.pt) +
-        (showPoints ? ' ' + padStart(fmtPoints(r.pointsPerNight), W.pts) : ''),
+        (showPoints ? ' ' + padStart(fmtPoints(r.pointsPerNight), W.pts) : '') +
+        (showCode ? ' ' + padEnd(codeOf(r), W.code) : ''),
     );
   }
 

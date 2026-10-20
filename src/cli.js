@@ -3,6 +3,7 @@ import {
   MarriottClient,
   RATE_TYPES,
   clusterRate,
+  splitCodes,
   toRows,
   openWarmed,
   isRealPage,
@@ -47,6 +48,8 @@ SEARCH OPTIONS
   --rate <kind>         standard | aaa | gov | senior | points   (default standard)
   --code <CODE|name>    corporate/promo cluster code, or a name saved under
                         config codes.<name>             (implies CLUSTER rate)
+                        Several, comma-separated (--code work,S9R), are priced
+                        in one search: each hotel shows its cheapest code rate
   --no-code             ignore a code stored in config for this run
   --amenities <a,b>     e.g. pool,pet-friendly,fitness-center
   --brands <a,b>        brand codes, e.g. RZ,AK,WH
@@ -706,7 +709,7 @@ Press Enter here when done…`);
           `${opts.adults ?? 1} adult(s)`,
           rateLabel(opts),
         ].join(' · ');
-        renderResults(rows, { total: conn.total, label });
+        renderResults(rows, { total: conn.total, label, codes: splitCodes(opts.__code), reveal: !!opts.reveal });
       }
       return 0;
     }

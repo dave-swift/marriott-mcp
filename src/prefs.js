@@ -136,9 +136,11 @@ export function unsetPref(prefs, key) {
 
 /** `ABCD12` -> `A****2`. Enough to recognise your own code, not enough to reuse it. */
 export function maskCode(code) {
-  const s = String(code);
-  if (s.length <= 2) return '*'.repeat(s.length);
-  return `${s[0]}${'*'.repeat(s.length - 2)}${s[s.length - 1]}`;
+  // Several codes, comma-separated, are masked one by one.
+  return String(code)
+    .split(',')
+    .map((s) => (s.length <= 2 ? '*'.repeat(s.length) : `${s[0]}${'*'.repeat(s.length - 2)}${s[s.length - 1]}`))
+    .join(',');
 }
 
 /**
@@ -155,10 +157,18 @@ export function maskCode(code) {
  * Returns { code, source } with code null when the search should use a rate family.
  */
 export function resolveCode({ code, noCode = false, explicitRate = false, prefs = loadPrefs(), env = process.env } = {}) {
+  // A code, a saved name, or several of either separated by commas ("work,AAA").
   const named = (v) => {
-    const key = String(v).trim().toLowerCase();
-    const hit = prefs.codes?.[key];
-    return hit ? validateCode(hit) : validateCode(v);
+    const codes = String(v)
+      .split(',')
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .map((part) => {
+        const hit = prefs.codes?.[part.toLowerCase()];
+        return hit ? validateCode(hit) : validateCode(part);
+      });
+    if (!codes.length) throw new Error(`"${v}" has no cluster code in it`);
+    return [...new Set(codes)].join(',');
   };
   if (code !== undefined && code !== null && code !== '' && code !== true) {
     return { code: named(code), source: 'argument' };

@@ -5,6 +5,7 @@
 // Same information, different channel: markers become words, colour becomes a column.
 
 import { tierScore } from './render.js';
+import { maskCode } from './prefs.js';
 
 const fmt = (v, cur) =>
   v == null ? '—' : `${v < 100 ? v.toFixed(2) : Math.round(v)} ${cur}`.trim();
@@ -67,6 +68,8 @@ export function resultsTable(rows, meta = {}) {
   // reads the fallback as "the code's price on this date" and concludes the date is
   // expensive rather than the code inapplicable.
   const codeMissed = (r) => !!meta.code && r.rateCategory === 'StandardRates';
+  // With several codes, say which one priced each hotel. Masked: codes stay out of the chat.
+  const showCode = String(meta.code ?? '').split(',').filter(Boolean).length > 1;
 
   const out = [];
   if (meta.label) out.push(`**${meta.label}**`, '');
@@ -89,8 +92,8 @@ export function resultsTable(rows, meta = {}) {
 
   // Award prices only come back when points were asked for: show their column only then.
   const showPoints = rows.some((r) => r.pointsPerNight != null);
-  out.push('| Tier | Hotel | Brand | Dist | Rating | /night | All-in | /tier-pt |' + (showPoints ? ' Points/night |' : '') + ' |');
-  out.push('|---|---|---|---|---:|---:|---:|---:|' + (showPoints ? '---:|' : '') + '---|');
+  out.push('| Tier | Hotel | Brand | Dist | Rating | /night | All-in | /tier-pt |' + (showPoints ? ' Points/night |' : '') + (showCode ? ' Code |' : '') + ' |');
+  out.push('|---|---|---|---|---:|---:|---:|---:|' + (showPoints ? '---:|' : '') + (showCode ? '---|' : '') + '---|');
   for (const r of rows) {
     out.push(
       '| ' +
@@ -104,6 +107,7 @@ export function resultsTable(rows, meta = {}) {
           fmt(r.totalPerNight, r.currency) + (r.converted ? '~' : '') + (codeMissed(r) ? '!' : ''),
           r.eurPerTier == null ? '—' : r.eurPerTier.toFixed(1),
           ...(showPoints ? [r.pointsPerNight == null ? '—' : r.pointsPerNight.toLocaleString('en-US')] : []),
+          ...(showCode ? [r.rateCode ? maskCode(r.rateCode) : 'standard'] : []),
           markFor(r),
         ].join(' | ') +
         ' |',
@@ -129,8 +133,11 @@ export function resultsTable(rows, meta = {}) {
   }
   if (rows.some(codeMissed)) {
     out.push(
-      `\`!\` code ${meta.code} did not apply here. This is the property's standard rate, ` +
-        'not a rate under that code.',
+      (showCode
+        ? `\`!\` none of the codes ${maskCode(meta.code)} applied here. This is the property's standard rate, ` +
+          'not a rate under any of them.'
+        : `\`!\` code ${maskCode(meta.code)} did not apply here. This is the property's standard rate, ` +
+          'not a rate under that code.'),
     );
   }
   if (meta.nights > 1) {

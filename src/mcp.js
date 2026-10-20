@@ -112,7 +112,8 @@ const STAY_PROPS = {
       'Corporate or promotional cluster code, or the name of one the user saved in their config (`marriott config set codes.<name> <CODE>`) — a name is preferred, ' +
       'since it keeps the code itself out of the conversation. Omit this and the user\'s configured default code, if any, applies automatically. ' +
       'Takes precedence over `rate`. Rates under a code are only bookable if you actually qualify for it. ' +
-      'Where the code did not apply, the row is marked `!` and shows that property\'s standard rate instead. Read that as "code unavailable", not as a price.',
+      'Several codes or names, comma-separated ("work,leisure"), are priced in one search: each hotel shows its cheapest bookable code rate, and a Code column says which (masked). ' +
+      'Where no code applied, the row is marked `!` and shows that property\'s standard rate instead. Read that as "code unavailable", not as a price.',
   },
   no_code: {
     type: 'boolean',
