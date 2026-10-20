@@ -518,6 +518,20 @@ export const BRAND_ANCHORS = [
   { name: 'Sydney', latitude: -33.8688, longitude: 151.2093 },
 ];
 
+/** Where Marriott serves its Scene7 images; media paths are relative to it. */
+export const IMAGE_HOST = 'https://cache.marriott.com';
+
+/**
+ * The full URL of a property's primary photo, square-cropped and 564px wide, from
+ * the relative Scene7 path in its media (`/is/image/marriotts7prod/...:Square`),
+ * or null when it has none.
+ */
+export function primaryImageUrl(property) {
+  const path = property?.media?.primaryImage?.edges?.[0]?.node?.imageUrls?.square;
+  if (typeof path !== 'string' || !path.startsWith('/is/image/')) return null;
+  return `${IMAGE_HOST}${path}?wid=564&fit=constrain`;
+}
+
 /** Flatten a search connection into plain rows for display. */
 export function toRows(conn) {
   return (conn.edges ?? []).map(({ node }) => {
@@ -552,6 +566,7 @@ export function toRows(conn) {
       membersOnly: rate?.membersOnly ?? null,
       status: rate?.status?.code ?? '',
       bookable: b.bookable ?? null,
+      image: primaryImageUrl(p),
     };
   });
 }
