@@ -1,7 +1,7 @@
 // Flattening a search connection into rows: the primary photo's full URL.
 // Run: node test/rows.test.mjs
 import assert from 'node:assert/strict';
-import { toRows, primaryImageUrl, pickRates, clusterRate, splitCodes } from '../src/marriott.js';
+import { toRows, primaryImageUrl, pickRates, clusterRate, splitCodes, rateRequestTypes } from '../src/marriott.js';
 import { resultsTable } from '../src/format.js';
 
 let passed = 0;
@@ -126,18 +126,55 @@ test('when no code applies, the standard rate prices the hotel and is marked', (
   assert.equal(rows[0].rateCategory, 'StandardRates');
   const table = resultsTable(rows, { code: 'WRK222,S9R' });
   assert.match(table, /705 USD!/);
-  assert.ok(table.includes('none of the codes W****2,S*R applied here'));
+  assert.ok(table.includes('codes W****2,S*R did not apply here'));
 });
 
-test('the results table names the winning code, masked, only for several codes', () => {
+test('the results table names the winning code, masked, whenever there is a code', () => {
   const rows = toRows({ edges: [hotel('LASBL', [coded('WRK222', 50000, 60000), cash(56640, 70454)])] });
-  const several = resultsTable(rows, { code: 'WRK222,S9R' });
-  assert.ok(several.includes('| Code |'));
-  assert.ok(several.includes('| W****2 |'));
-  assert.ok(!several.includes('WRK222'));
-  const one = resultsTable(rows, { code: 'WRK222' });
-  assert.ok(!one.includes('| Code |'));
-  assert.ok(!one.includes('WRK222'));
+  for (const code of ['WRK222,S9R', 'WRK222']) {
+    const table = resultsTable(rows, { code });
+    assert.ok(table.includes('| Code |'));
+    assert.ok(table.includes('| W****2 |'));
+    assert.ok(!table.includes('WRK222'));
+  }
+  assert.ok(!resultsTable(rows, {}).includes('| Code |'));
+});
+
+test('rate and code combine in one request, and the standard rate is always asked for', () => {
+  const S = { type: 'STANDARD', value: '' };
+  const MRW = { type: 'CLUSTER', value: 'MRW' };
+  const P17 = { type: 'CLUSTER', value: 'P17' };
+  const AAA = { type: 'CLUSTER', value: 'AAA' };
+  const ADP = { type: 'CLUSTER', value: 'ADP' };
+  assert.deepEqual(rateRequestTypes(), [S]);
+  assert.deepEqual(rateRequestTypes({ rate: 'points', code: 'AAA,ADP' }), [MRW, S, P17, AAA, ADP]);
+  assert.deepEqual(rateRequestTypes({ code: 'ADP' }), [S, ADP]);
+  assert.deepEqual(rateRequestTypes({ rate: 'AAA' }), [{ type: 'AAA', value: 'aaa' }, S]);
+  // A code that a rate family already sends goes once.
+  assert.deepEqual(rateRequestTypes({ rate: 'points', code: 'mrw' }), [MRW, S, P17]);
+  assert.throws(() => rateRequestTypes({ rate: 'nope' }), /rate must be one of/);
+});
+
+test('a points search with codes keeps the points and prices the cheapest code', () => {
+  const [r] = toRows({ edges: [hotel('LASBL', [points(390000), p17, coded('AAA', 52000, 64000), coded('ADP', 50000, 61000), cash(56640, 70454)])] });
+  assert.equal(r.rateCode, 'ADP');
+  assert.equal(r.totalPerNight, 610);
+  assert.equal(r.pointsPerNight, 130000);
+});
+
+test('a rate family that is not a code still beats the standard rate', () => {
+  // AAA, GOV and senior rates come back in their own category, not as StandardRates.
+  const aaa = { ...cash(48000, 59000), rateCategory: { code: 'AAA', value: null } };
+  const [r] = toRows({ edges: [hotel('LASBL', [cash(40000, 50000), aaa])] });
+  assert.equal(r.totalPerNight, 590);
+});
+
+test('the AAA rate is marked when only the standard rate came back', () => {
+  const rows = toRows({ edges: [hotel('LASBL', [cash(56640, 70454)])] });
+  const table = resultsTable(rows, { rate: 'aaa' });
+  assert.ok(table.includes('705 USD!'));
+  assert.ok(table.includes('the aaa rate did not apply here'));
+  assert.ok(!resultsTable(rows, { rate: 'points' }).includes('!'));
 });
 
 console.log(`\n${passed} passed`);

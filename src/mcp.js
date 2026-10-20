@@ -9,7 +9,7 @@
 
 import { createInterface } from 'node:readline';
 import { Session } from './session.js';
-import { RATE_TYPES, clusterRate, toRows, DEFAULT_RADIUS_M } from './marriott.js';
+import { RATE_TYPES, rateRequestTypes, toRows, DEFAULT_RADIUS_M } from './marriott.js';
 import { loadPrefs, resolveCode, maskCode, CONFIG_PATH } from './prefs.js';
 import { BRANDS, TIERS, tierRank } from './brands.js';
 import { score, sortRows, resultsTable, scanTable } from './format.js';
@@ -55,17 +55,13 @@ function activeCode(args = {}) {
 
 /** How a result header describes what was priced. Codes are masked. */
 function rateLabelFor(args, code) {
-  return code ? `code ${maskCode(code)}` : `rate ${args.rate ?? 'standard'}`;
+  if (!code) return `rate ${args.rate ?? 'standard'}`;
+  return args.rate !== undefined ? `rate ${args.rate} + code ${maskCode(code)}` : `code ${maskCode(code)}`;
 }
 
 function rateTypesFor(args) {
-  const code = activeCode(args);
-  if (code) return clusterRate(code);
-  const kind = String(args.rate ?? 'standard').toLowerCase();
-  if (!RATE_TYPES[kind]) {
-    throw new Error(`rate must be one of: ${Object.keys(RATE_TYPES).join(', ')}`);
-  }
-  return RATE_TYPES[kind];
+  // `rate` and `code` combine, and the standard rate is always asked for too.
+  return rateRequestTypes({ rate: args.rate, code: activeCode(args) });
 }
 
 const list = (v) =>
@@ -111,7 +107,7 @@ const STAY_PROPS = {
     description:
       'Corporate or promotional cluster code, or the name of one the user saved in their config (`marriott config set codes.<name> <CODE>`) — a name is preferred, ' +
       'since it keeps the code itself out of the conversation. Omit this and the user\'s configured default code, if any, applies automatically. ' +
-      'Takes precedence over `rate`. Rates under a code are only bookable if you actually qualify for it. ' +
+      'Combines with `rate` (rate "points" with a code prices both), and the standard rate is always asked for too. Rates under a code are only bookable if you actually qualify for it. ' +
       'Several codes or names, comma-separated ("work,leisure"), are priced in one search: each hotel shows its cheapest bookable code rate, and a Code column says which (masked). ' +
       'Where no code applied, the row is marked `!` and shows that property\'s standard rate instead. Read that as "code unavailable", not as a price.',
   },
@@ -221,6 +217,7 @@ const TOOLS = [
           total: conn.total,
           label,
           code: activeCode(args),
+          rate: args.rate,
           nights: Math.round((Date.parse(endDate) - Date.parse(startDate)) / 86400000),
         });
         return fx.converted
@@ -277,6 +274,7 @@ const TOOLS = [
         return scanTable(days, {
           label: `${place.description} · ${nights} night(s) · ${rateLabelFor(args, activeCode(args))}`,
           code: activeCode(args),
+          rate: args.rate,
           nights,
         });
       });

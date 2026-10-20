@@ -588,10 +588,9 @@ config.json  "code"       your stored default
 
 Two deliberate rules:
 
-- **An explicit `--rate` beats a stored code.** They are mutually exclusive, so
-  `marriott search "Lisbon" --rate points` gives you points even with a default code set,
-  rather than silently ignoring what you asked for. `--no-code` does the same for a plain
-  standard search.
+- **An explicit `--rate` leaves a stored code out.** `marriott search "Lisbon" --rate points`
+  prices points and the standard rate, not your default code as well. To combine them, type
+  the code too: `--rate points --code work`. `--no-code` leaves it out of a plain search.
 - **Codes are masked in output.** Result headers and `marriott config` print `A****3`, not
   the code, so a screenshot or a pasted terminal does not leak it. `--reveal` when you
   actually want it.
@@ -634,7 +633,7 @@ without putting the code in the conversation; pass `no_code: true` to ignore the
 
 ## Rate codes
 
-| `--rate` / `--code` | Sent as |
+| `--rate` / `--code` | Sent as (plus `{"type":"STANDARD","value":""}`, always) |
 |---|---|
 | `standard` (default) | `[{"type":"STANDARD","value":""}]` |
 | `aaa` | `[{"type":"AAA","value":"aaa"}]` |
@@ -643,12 +642,18 @@ without putting the code in the conversation; pass `no_code: true` to ignore the
 | `--code <CODE>` | `[{"type":"CLUSTER","value":"<CODE>"}]` |
 | `points` | `[{"type":"CLUSTER","value":"MRW"},{"type":"STANDARD","value":""},{"type":"CLUSTER","value":"P17"}]` |
 
+`--rate` and `--code` combine: `--rate points --code AAA,ADP` sends the points family's
+three entries and a `CLUSTER` entry for each code, and every search asks for the standard
+rate too, each type once. Marriott answers only what is asked for (a code search returns no
+points or standard rate unless they are in the request), so the standard rate is always
+asked for, to give each hotel a price to fall back to.
+
 `CLUSTER` is the generic carrier: any Marriott cluster/corporate code works via `--code`.
 Several codes, comma-separated (`--code work,S9R`, or the MCP's `code: "work,S9R"`), are
 asked for in one search: one `CLUSTER` entry each. Each hotel is priced at its cheapest
-bookable code rate, and a CODE column (masked unless `--reveal`) says which code won. The
-standard rate is used only when none of the codes applied, and is marked `!` as for one code.
-Points and a corporate code are mutually exclusive.
+bookable code rate, and a CODE column (masked unless `--reveal`) says which code won. Any
+rate other than the standard one (a code's, or the AAA, GOV or senior rate) beats the
+standard rate, which prices a hotel only when nothing else applied, and is then marked `!`.
 
 A `points` search gets each hotel's rates back as one entry per type, in an order that
 depends on the hotel's reservation system, so rows pick the cash rate and the award (MRW)

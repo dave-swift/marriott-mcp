@@ -6,6 +6,22 @@
 
 import { tierScore } from './render.js';
 import { maskCode } from './prefs.js';
+import { SPECIAL_RATES } from './marriott.js';
+
+/**
+ * What a search asked for beyond the standard rate, as the `!` note names it, codes
+ * masked: "code W****2", "the aaa rate and codes W****2,S*R", or "" for nothing more.
+ * Every search also asks for the standard rate (rateRequestTypes), so a hotel priced at
+ * it, when something else was asked for, is one where nothing else applied.
+ */
+function askedFor(meta) {
+  const codes = String(meta.code ?? '').split(',').filter(Boolean);
+  const rate = String(meta.rate ?? '').toLowerCase();
+  const parts = [];
+  if (SPECIAL_RATES.includes(rate)) parts.push(`the ${rate} rate`);
+  if (codes.length) parts.push(`${codes.length > 1 ? 'codes' : 'code'} ${maskCode(codes.join(','))}`);
+  return parts.join(' and ');
+}
 
 const fmt = (v, cur) =>
   v == null ? '—' : `${v < 100 ? v.toFixed(2) : Math.round(v)} ${cur}`.trim();
@@ -67,9 +83,10 @@ export function resultsTable(rows, meta = {}) {
   // at the standard price. Marriott flags this nowhere, so without surfacing it a caller
   // reads the fallback as "the code's price on this date" and concludes the date is
   // expensive rather than the code inapplicable.
-  const codeMissed = (r) => !!meta.code && r.rateCategory === 'StandardRates';
-  // With several codes, say which one priced each hotel. Masked: codes stay out of the chat.
-  const showCode = String(meta.code ?? '').split(',').filter(Boolean).length > 1;
+  const asked = askedFor(meta);
+  const codeMissed = (r) => !!asked && r.rateCategory === 'StandardRates';
+  // With a code, say which rate priced each hotel. Masked: codes stay out of the chat.
+  const showCode = !!meta.code;
 
   const out = [];
   if (meta.label) out.push(`**${meta.label}**`, '');
@@ -133,11 +150,7 @@ export function resultsTable(rows, meta = {}) {
   }
   if (rows.some(codeMissed)) {
     out.push(
-      (showCode
-        ? `\`!\` none of the codes ${maskCode(meta.code)} applied here. This is the property's standard rate, ` +
-          'not a rate under any of them.'
-        : `\`!\` code ${maskCode(meta.code)} did not apply here. This is the property's standard rate, ` +
-          'not a rate under that code.'),
+      `\`!\` ${asked} did not apply here. This is the property's standard rate, not one of those.`,
     );
   }
   if (meta.nights > 1) {
@@ -168,7 +181,8 @@ export function scanTable(days, meta = {}) {
   const max = Math.max(...lows);
   const cur = withData[0].cheapest.currency;
 
-  const codeMissed = (r) => !!meta.code && r?.rateCategory === 'StandardRates';
+  const asked = askedFor(meta);
+  const codeMissed = (r) => !!asked && r?.rateCategory === 'StandardRates';
 
   const out = [];
   if (meta.label) out.push(`**${meta.label}**`, '');
@@ -206,7 +220,7 @@ export function scanTable(days, meta = {}) {
   );
   if (withData.some((d) => codeMissed(d.cheapest))) {
     out.push(
-      `\`!\` code ${meta.code} did not apply on that date. The price shown is a standard rate, ` +
+      `\`!\` ${asked} did not apply on that date. The price shown is a standard rate, ` +
         'so the spread above is not a like-for-like comparison.',
     );
   }

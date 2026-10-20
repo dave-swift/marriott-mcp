@@ -71,6 +71,29 @@ export const splitCodes = (code) =>
  */
 export const clusterRate = (code) => [...new Set(splitCodes(code))].map((value) => ({ type: 'CLUSTER', value }));
 
+/** The rate families that ask for something other than the plain standard rate. */
+export const SPECIAL_RATES = ['aaa', 'gov', 'senior'];
+
+/**
+ * Every rate type one search asks for: the `rate` family, a CLUSTER entry per code,
+ * and always the standard rate, each once. They combine (`--rate points --code A,B`
+ * prices points, both codes and the standard rate in one search), and the standard rate
+ * is there whatever else is asked for, so a hotel where nothing else applies still has
+ * a price to fall back to, and pickRates can tell it apart.
+ */
+export function rateRequestTypes({ rate = 'standard', code = null } = {}) {
+  const kind = String(rate ?? 'standard').toLowerCase();
+  const family = RATE_TYPES[kind];
+  if (!family) throw new Error(`rate must be one of: ${Object.keys(RATE_TYPES).join(', ')}`);
+  const seen = new Set();
+  return [...family, ...(code ? clusterRate(code) : []), ...RATE_TYPES.standard].filter((t) => {
+    const key = `${t.type}:${t.value}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 const FACET_TERMS = [
   'BRANDS',
   'AMENITIES',
@@ -552,9 +575,10 @@ export function primaryImageUrl(property) {
  * a bookable one first. A hotel with no cash rate falls back to its points rate,
  * so its status still says whether it can be booked.
  *
- * A code's rate comes back as a "Special" category with the code as its value. When a
- * search asks for several codes, the cheapest bookable code rate wins; the standard
- * rate is only used when none of the codes applied, so it still reads as "code missed".
+ * Every search also asks for the standard rate (rateRequestTypes). Any other cash rate
+ * (a code's comes back as a "Special" category with the code as its value) beats it: the
+ * cheapest bookable one wins, and the standard rate is only used when nothing else
+ * applied, so it still reads as "code missed".
  */
 export function pickRates(rates = []) {
   const list = (rates ?? []).filter(Boolean);
@@ -562,7 +586,7 @@ export function pickRates(rates = []) {
   const isCash = (r) => !!r.rateModes?.lowestAverageRate;
   const isPoints = (r) => r.rateModes?.pointsPerUnit?.points != null;
   const allIn = (r) => money(r.rateModes.lowestAverageRate.totalAmount)?.value ?? Infinity;
-  const codeRates = list.filter((r) => isCash(r) && sellable(r) && r.rateCategory?.code === 'Special');
+  const codeRates = list.filter((r) => isCash(r) && sellable(r) && r.rateCategory?.code !== 'StandardRates');
   const cheapestCode = codeRates.reduce((a, b) => (a && allIn(a) <= allIn(b) ? a : b), null);
   const cash = cheapestCode ?? list.find((r) => isCash(r) && sellable(r)) ?? list.find(isCash);
   const pointsRate = list.find((r) => isPoints(r) && sellable(r)) ?? null;

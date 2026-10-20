@@ -1,8 +1,7 @@
 import { Browser } from './cdp.js';
 import {
   MarriottClient,
-  RATE_TYPES,
-  clusterRate,
+  rateRequestTypes,
   splitCodes,
   toRows,
   openWarmed,
@@ -47,9 +46,11 @@ SEARCH OPTIONS
   --rooms <n>           rooms                (default 1)
   --rate <kind>         standard | aaa | gov | senior | points   (default standard)
   --code <CODE|name>    corporate/promo cluster code, or a name saved under
-                        config codes.<name>             (implies CLUSTER rate)
+                        config codes.<name>             (a CLUSTER rate)
                         Several, comma-separated (--code work,S9R), are priced
-                        in one search: each hotel shows its cheapest code rate
+                        in one search: each hotel shows its cheapest code rate.
+                        Combines with --rate (--rate points --code work), and
+                        every search asks for the standard rate too
   --no-code             ignore a code stored in config for this run
   --amenities <a,b>     e.g. pool,pet-friendly,fitness-center
   --brands <a,b>        brand codes, e.g. RZ,AK,WH
@@ -142,12 +143,12 @@ function resolveDates(opts) {
 function rateTypesFor(opts) {
   // opts.__code is resolved once in main(): --code, then MARRIOTT_CODE, then the
   // config file. Nothing here knows about any particular code.
-  if (opts.__code) return clusterRate(opts.__code);
-  const kind = String(opts.rate ?? 'standard').toLowerCase();
-  if (!RATE_TYPES[kind]) {
-    throw new Error(`--rate must be one of: ${Object.keys(RATE_TYPES).join(', ')}`);
+  // --rate and --code combine, and the standard rate is always asked for too.
+  try {
+    return rateRequestTypes({ rate: opts.rate, code: opts.__code });
+  } catch (e) {
+    throw new Error(`--${e.message}`);
   }
-  return RATE_TYPES[kind];
 }
 
 /**
@@ -155,9 +156,11 @@ function rateTypesFor(opts) {
  * pasting your terminal somewhere does not hand over your corporate code.
  */
 function rateLabel(opts) {
-  if (!opts.__code) return `rate ${opts.rate ?? 'standard'}`;
+  const rate = opts.rate !== undefined ? `rate ${opts.rate}` : '';
+  if (!opts.__code) return rate || 'rate standard';
   const shown = opts.reveal ? opts.__code : maskCode(opts.__code);
-  return `code ${shown}${opts.__codeSource === 'config' ? ' (config)' : ''}`;
+  const code = `code ${shown}${opts.__codeSource === 'config' ? ' (config)' : ''}`;
+  return rate ? `${rate} + ${code}` : code;
 }
 
 /** Config-file values stand in for flags the user did not type. */
@@ -296,9 +299,9 @@ export async function main(argv) {
     return configCommand(opts, prefs);
   }
 
-  // Resolve the cluster code once, here, so every command agrees on it. Note that an
-  // explicitly typed --rate wins over a code that came from the config file: the two are
-  // mutually exclusive, and what you asked for on the line should beat a stored default.
+  // Resolve the cluster code once, here, so every command agrees on it. An explicitly
+  // typed --rate leaves out a code that came from the config file or the environment:
+  // what you asked for on the line is what gets priced. Type --code too to combine them.
   const resolved = resolveCode({
     code: opts.code,
     noCode: !!opts['no-code'],
@@ -709,7 +712,7 @@ Press Enter here when done…`);
           `${opts.adults ?? 1} adult(s)`,
           rateLabel(opts),
         ].join(' · ');
-        renderResults(rows, { total: conn.total, label, codes: splitCodes(opts.__code), reveal: !!opts.reveal });
+        renderResults(rows, { total: conn.total, label, codes: splitCodes(opts.__code), rate: opts.rate, reveal: !!opts.reveal });
       }
       return 0;
     }

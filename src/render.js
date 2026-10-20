@@ -212,8 +212,8 @@ export function renderResults(rows, meta = {}) {
 
   // Award prices only come back when points were asked for: show their column only then.
   const showPoints = rows.some((r) => r.pointsPerNight != null);
-  // With several codes, say which one priced each hotel (masked unless meta.reveal).
-  const showCode = (meta.codes?.length ?? 0) > 1;
+  // With a code, say which rate priced each hotel (masked unless meta.reveal).
+  const showCode = (meta.codes?.length ?? 0) > 0;
   const codeOf = (r) => (r.rateCode ? (meta.reveal ? r.rateCode : maskCode(r.rateCode)) : c.grey('std'));
   const W = { mark: 3, tier: 4, hotel: 38, brand: 17, dist: 6, rtg: 4, night: 11, total: 12, pt: 6, pts: 10, code: 12 };
   const head =

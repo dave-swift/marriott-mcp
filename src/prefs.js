@@ -151,8 +151,9 @@ export function maskCode(code) {
  *   1. an explicit --code / `code` argument
  *   2. MARRIOTT_CODE in the environment
  *   3. `code` in the config file
- * `noCode` (--no-code) suppresses 2 and 3 for one run, and an explicitly chosen rate
- * family wins over a merely-default code, since the two are mutually exclusive.
+ * `noCode` (--no-code) suppresses 2 and 3 for one run, and so does an explicitly chosen
+ * rate family: a typed rate prices what was typed, not a stored default as well. A code
+ * given as an argument combines with the rate family (rateRequestTypes).
  *
  * Returns { code, source } with code null when the search should use a rate family.
  */
